@@ -27,6 +27,10 @@ web_cycle() { # CONTENDER RUN
   dexd bash -c "exec ruby /bench/loadgen.rb $WEB_BASE/up $LOAD_RPS /tmp/load.jsonl >/dev/null 2>&1"
   sleep "$STEADY"
   kt=$(kill_web "$c") || { emit track=A contender="$c" metric=web_recovery_s run="$run" value=null outcome=kill_failed; cleanup_all; return; }
+  # Require /up to actually drop before timing recovery: a killed puma's
+  # last in-flight 200 must never stop the clock at ~0s (the lingering-worker
+  # false positive). 5s is generous for a SIGKILLed single-process puma.
+  wait_down 5 || true
   if recovers "$c"; then timeout=$REC_TIMEOUT; else timeout=$NONREC_WINDOW; fi
   if rec=$(wait_up "$timeout"); then
     val=$(fsub "$rec" "$kt"); outcome=recovered

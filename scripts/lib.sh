@@ -48,8 +48,10 @@ start_contender() {
       ;;
     overmind)
       # --auto-restart web,jobs: overmind's documented supervision mode
-      # (without it, overmind stops the formation like foreman does).
-      dexd bash -c "cd /app && date +%s.%N >/tmp/bench_t0 && OVERMIND_SOCKET=/tmp/overmind.sock OVERMIND_AUTO_RESTART=web,jobs exec overmind start -p 3000 >>/tmp/contender.log 2>&1"
+      # (without it, overmind stops the formation like foreman does). The
+      # socket rm is belt-and-suspenders on top of cleanup_all: a stale
+      # socket makes overmind refuse to start ("already running").
+      dexd bash -c "cd /app && rm -f /tmp/overmind.sock .overmind.sock && date +%s.%N >/tmp/bench_t0 && OVERMIND_SOCKET=/tmp/overmind.sock OVERMIND_AUTO_RESTART=web,jobs exec overmind start -p 3000 >>/tmp/contender.log 2>&1"
       ;;
     bare)
       dexd bash -c "cd /app && date +%s.%N >/tmp/bench_t0 && exec bundle exec puma -C config/puma.rb >>/tmp/web.log 2>&1"
@@ -72,11 +74,31 @@ boot_t0() { dex cat /tmp/bench_t0; }
 # wait_up TIMEOUT — epoch float of the first 200 from $WEB_BASE/up.
 wait_up() { dex ruby /bench/wait_200.rb "$WEB_BASE/up" "$1"; }
 
+# wait_down TIMEOUT — block until /up stops returning 200 (a non-200 or a
+# connection error), so a killed child's lingering in-flight response can
+# never be mistaken for recovery. Returns 0 once down, 1 on timeout.
+wait_down() {
+  dex ruby -e '
+    require "net/http"; require "uri"
+    uri = URI(ARGV[0]); deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + Float(ARGV[1])
+    loop do
+      begin
+        code = Net::HTTP.start(uri.host, uri.port, open_timeout: 0.25, read_timeout: 1.0) { |h| h.get(uri.path).code.to_i }
+        exit 0 unless code == 200
+      rescue StandardError
+        exit 0
+      end
+      exit 1 if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+      sleep 0.02
+    end
+  ' "$WEB_BASE/up" "$1"
+}
+
 # Supervisor process PID inside the runner (Track B).
 sup_pid() {
   case "$1" in
     odoshi*)  dex pgrep -f "odoshi ru[n]" | head -1 ;;
-    foreman)  dex pgrep -f "foreman star[t]" | head -1 ;;
+    foreman)  dex pgrep -f "foreman: mai[n]" | head -1 ;;
     overmind) dex pgrep -f "overmind star[t]" | head -1 ;;
   esac
 }
@@ -86,7 +108,7 @@ sup_pid() {
 sup_alive() {
   case "$1" in
     odoshi*)  dex pgrep -f "odoshi ru[n]" >/dev/null 2>&1 ;;
-    foreman)  dex pgrep -f "foreman star[t]" >/dev/null 2>&1 ;;
+    foreman)  dex pgrep -f "foreman: mai[n]" >/dev/null 2>&1 ;;
     overmind) dex pgrep -f "overmind star[t]" >/dev/null 2>&1 ;;
     compose)  return 0 ;; # the docker daemon does not die with the child
     bare)     return 1 ;; # there is no supervisor, by definition
@@ -122,46 +144,13 @@ kill_jobs() {
 
 # ----------------------------------------------------------------- cleanup -
 # Tear down whatever contender (and helpers) may be running, wait for port
-# 3000 to free up. Graceful TERM first, short grace loop, then SIGKILL.
+# 3000 to free up. Runs bench/cleanup.sh as a FILE so the cleanup shell's
+# own cmdline carries none of the kill patterns (the self-match trap that
+# once left a stale overmind socket and failed the next boot).
 cleanup_all() {
   $COMPOSE --profile compose stop -t 3 web jobs >/dev/null 2>&1 || true
   $COMPOSE --profile compose rm -f web jobs >/dev/null 2>&1 || true
-  dex bash -c '
-    pkill -TERM -f "odoshi ru[n]" 2>/dev/null
-    pkill -TERM -f "foreman star[t]" 2>/dev/null
-    pkill -TERM -f "overmin[d]" 2>/dev/null
-    pkill -TERM -f "bench/loadgen.r[b]" 2>/dev/null
-    pkill -TERM -f "bench/enqueue_loop.r[b]" 2>/dev/null
-    for i in $(seq 1 20); do
-      pgrep -f "odoshi ru[n]|foreman star[t]|overmin[d]|pum[a] |puma .*config/pum[a].rb|solid-queu[e]|bin/job[s]" >/dev/null 2>&1 || break
-      sleep 0.3
-    done
-    pkill -9 -f "odoshi ru[n]" 2>/dev/null
-    pkill -9 -f "foreman star[t]" 2>/dev/null
-    pkill -9 -f "overmin[d]" 2>/dev/null
-    pkill -9 -f "tmu[x]" 2>/dev/null
-    pkill -9 -f "puma .*config/pum[a].rb" 2>/dev/null
-    pkill -9 -f "pum[a] [0-9].*(tcp|unix|ssl)://" 2>/dev/null
-    pkill -9 -f "solid-queu[e]" 2>/dev/null
-    pkill -9 -f "bin/job[s]" 2>/dev/null
-    pkill -9 -f "bench/loadgen.r[b]" 2>/dev/null
-    pkill -9 -f "bench/enqueue_loop.r[b]" 2>/dev/null
-    rm -f /tmp/overmind.sock /app/.overmind.sock /tmp/load.jsonl
-    true
-  ' >/dev/null 2>&1 || true
-  # Port 3000 must actually be free before the next boot.
-  dex ruby -e '
-    require "socket"
-    100.times do
-      begin
-        TCPSocket.new("127.0.0.1", 3000).close
-        sleep 0.2
-      rescue StandardError
-        exit 0
-      end
-    end
-    abort "port 3000 still bound after cleanup"
-  '
+  dex bash /bench/cleanup.sh
 }
 
 reset_db() {
