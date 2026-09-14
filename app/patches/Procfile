@@ -1,0 +1,5 @@
+# The foreman/overmind formation — the same two processes odoshi supervises.
+# Both tools are started with base port 3000 (their standard -p flag), so
+# `web` binds the same :3000 as every other contender.
+web: bundle exec puma -C config/puma.rb
+jobs: bundle exec bin/jobs

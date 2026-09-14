@@ -1,0 +1,23 @@
+# odoshi-bench queue topology: the Ruby worker (bin/jobs) works ONLY the
+# "default" queue; "elixir" is the designated queue of the beam Solid Queue
+# worker (Track D). 0.1s polling keeps queue-poll jitter out of the
+# recovery-lag measurement (it is identical for every contender — they all
+# run this same bin/jobs).
+default: &default
+  dispatchers:
+    - polling_interval: 1
+      batch_size: 500
+  workers:
+    - queues: [ default ]
+      threads: 3
+      processes: 1
+      polling_interval: 0.1
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  <<: *default

@@ -1,0 +1,92 @@
+# odoshi-bench stack.
+#
+#   postgres  postgres:16 — the app's four production databases.
+#   runner    the app image, idle; the harness execs contenders (odoshi,
+#             foreman, overmind, bare) and all measurement tools inside it,
+#             so every in-container contender shares one environment.
+#   web/jobs  (profile: compose) the SAME image running puma / bin/jobs as
+#             separate containers with `restart: always` — the docker-compose
+#             contender exactly as its docs recommend. init: true puts tini
+#             at PID 1, so SIGKILLing the app process from inside is a real
+#             crash (exit -> restart policy applies); `docker kill` would be
+#             a manual stop, which docker deliberately does NOT restart.
+#   beam-queue (profile: beam) the Elixir Solid Queue worker for Track D.
+name: odoshi-bench
+
+x-app-env: &app-env
+  RAILS_ENV: production
+  SECRET_KEY_BASE: odoshi-bench-secret-key-base-0123456789abcdef
+  DB_HOST: postgres
+  DB_USER: postgres
+  DB_PASSWORD: postgres
+  PORT: "3000"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  runner:
+    build: ./app
+    image: odoshi-bench-app
+    init: true
+    command: ["sleep", "infinity"]
+    environment:
+      <<: *app-env
+    volumes:
+      - ./bench:/bench:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: odoshi-bench-app
+    profiles: ["compose"]
+    init: true
+    restart: always
+    command: ["bundle", "exec", "puma", "-C", "config/puma.rb"]
+    environment:
+      <<: *app-env
+    # Documented-best-practice healthcheck. Note for Track C: docker marks
+    # the container unhealthy but does NOT restart on health — restart
+    # policies act only on container exit (autoheal is a third-party add-on).
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/up >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  jobs:
+    image: odoshi-bench-app
+    profiles: ["compose"]
+    init: true
+    restart: always
+    command: ["bundle", "exec", "bin/jobs"]
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  beam-queue:
+    build: ./beam
+    profiles: ["beam"]
+    init: true
+    environment:
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      QUEUE_DB: app_production_queue
+      PRIMARY_DB: app_production
+    depends_on:
+      postgres:
+        condition: service_healthy
