@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench-ci:
+    # The REDUCED matrix (mode=ci: N=3, shorter observation windows,
+    # tracks A/B/C) as a smoke/regression check. The README's numbers come
+    # from full local runs (mode=full, N=5) on disclosed hardware — CI
+    # numbers regress-check the stack, they do not populate the README.
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Layer-cached build: the expensive layer (rails new + bundle install)
+      # only rebuilds when the Dockerfile or template change.
+      - uses: docker/build-push-action@v6
+        with:
+          context: app
+          tags: odoshi-bench-app
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: bench (reduced matrix)
+        run: scripts/bench.sh --mode ci --tracks abc --no-build
+
+      - name: upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ github.run_id }}
+          path: |
+            results/results.json
+            results/raw/*.jsonl
+
+      - name: stack logs on failure
+        if: failure()
+        run: |
+          docker compose ps -a || true
+          docker compose logs --no-color --tail 100 || true
+          docker compose exec -T runner bash -c 'tail -50 /tmp/contender.log 2>/dev/null' || true
