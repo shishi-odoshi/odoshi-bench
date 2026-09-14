@@ -115,7 +115,7 @@ md << "| Supervisor | RSS mean | RSS max | CPU% (window) | Window | Note |\n|---
   r = find(aggregates, "B", "sup_rss_cpu", c)
   next unless r
   e = r["extra_median"]
-  note = c == "overmind" ? "+ tmux server #{e['tmux_rss_mb'] ? format('%.1f MB', e['tmux_rss_mb']) : '—'}" : ""
+  note = c == "overmind" && e["tmux_rss_mb"] ? "+ tmux server #{format('%.1f MB', e['tmux_rss_mb'])}" : ""
   md << "| #{c} | #{e['rss_mb_mean'] ? format('%.1f MB', e['rss_mb_mean']) : '—'} | #{e['rss_mb_max'] ? format('%.1f MB', e['rss_mb_max']) : '—'} | #{e['cpu_pct'] ? format('%.2f%%', e['cpu_pct']) : '—'} | #{e['window_s']&.round}s | #{note} |\n"
 end
 

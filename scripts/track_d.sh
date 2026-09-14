@@ -27,10 +27,13 @@ enqueue_batch() { # QUEUE
 finished_count() { psqlq app_production_queue "SELECT count(*) FROM solid_queue_jobs WHERE finished_at IS NOT NULL"; }
 
 drain_stats() { # T_START -> json via ruby
+  # NB: psqlq strips ALL whitespace (tr -d), so the min/max separator must
+  # be a non-space character or the two epochs fuse into one blob.
   local t_start=$1 row
-  row=$(psqlq app_production_queue "SELECT extract(epoch from min(finished_at)) || ' ' || extract(epoch from max(finished_at)) FROM solid_queue_jobs WHERE finished_at IS NOT NULL" )
+  row=$(psqlq app_production_queue "SELECT extract(epoch from min(finished_at)) || '|' || extract(epoch from max(finished_at)) FROM solid_queue_jobs WHERE finished_at IS NOT NULL" )
   ruby -r json -e '
-    first, last = ARGV[0].split.map(&:to_f)
+    first, last = ARGV[0].split("|").map(&:to_f)
+    abort "drain_stats: bad row #{ARGV[0].inspect}" unless first && last
     t0 = ARGV[1].to_f
     window = (last - first).round(3)
     puts({ drain_s: (last - t0).round(3), window_s: window,

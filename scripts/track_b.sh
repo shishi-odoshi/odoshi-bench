@@ -49,7 +49,8 @@ rss_cycle() { # CONTENDER
     # overmind cannot run without a tmux server; its RSS is part of the
     # real supervision footprint even though it is not "the supervisor
     # process". Reported separately, added to nothing.
-    tmux_kb=$(dex bash -c 'p=$(pgrep -x tmux | head -1); [ -n "$p" ] && grep VmRSS /proc/$p/status | grep -o "[0-9]*"' || echo "")
+    # NB: the tmux server retitles to "tmux: server", so match -f, not -x.
+    tmux_kb=$(dex bash -c 'p=$(pgrep -f "tmu[x]" | head -1); [ -n "$p" ] && grep VmRSS /proc/$p/status | grep -o "[0-9]*"' || echo "")
     [ -n "$tmux_kb" ] && extra=$(ruby -r json -e 'j = JSON.parse(ARGV[0]); j["tmux_rss_mb"] = (ARGV[1].to_f/1024).round(1); puts j.to_json' "$sample" "$tmux_kb")
   fi
   emit track=B contender="$c" metric=sup_rss_cpu run=1 value=null outcome=ok extra:="$extra"
