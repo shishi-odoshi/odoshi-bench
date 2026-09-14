@@ -1,0 +1,26 @@
+{"ts":"2026-09-14T03:09:24Z","mode":"smoke","row_type":"meta","host":{"os":"Darwin arm64","cpus":"10","docker":"Docker version 28.3.2, build 578ccf6","ci":"local"},"versions":{"ruby":"ruby 3.4.10 (2026-06-30 revision 2b0b7728dc) +PRISM [aarch64-linux]","rails":"Rails 8.1.3.1","puma":"puma version 8.0.2","odoshi":"0.3.0","solid_queue":"solid_queue (1.7.0)","foreman":"0.90.0","overmind":"Overmind version 2.5.1","wrk":"wrk debian/4.1.0-4+b1 [epoll] Copyright","postgres":"postgres (PostgreSQL) 16.15 (Debian 16.15-1.pgdg13+2)"}}
+{"ts":"2026-09-14T03:09:31Z","mode":"smoke","track":"A","contender":"odoshi","metric":"web_recovery_s","run":1,"value":1.719,"outcome":"recovered","extra":{"window_s":1.719,"requests":34,"failed":33}}
+{"ts":"2026-09-14T03:09:47Z","mode":"smoke","track":"A","contender":"foreman","metric":"web_recovery_s","run":1,"value":null,"outcome":"formation_exit","extra":{"window_s":10.679,"requests":213,"failed":213}}
+{"ts":"2026-09-14T03:09:53Z","mode":"smoke","track":"A","contender":"overmind","metric":"web_recovery_s","run":1,"value":0.578,"outcome":"recovered","extra":{"window_s":0.578,"requests":12,"failed":11}}
+{"ts":"2026-09-14T03:10:03Z","mode":"smoke","track":"A","contender":"compose","metric":"web_recovery_s","run":1,"value":1.477,"outcome":"recovered","extra":{"window_s":1.477,"requests":29,"failed":28}}
+{"ts":"2026-09-14T03:10:19Z","mode":"smoke","track":"A","contender":"bare","metric":"web_recovery_s","run":1,"value":null,"outcome":"no_supervisor","extra":{"window_s":10.514,"requests":211,"failed":211}}
+{"ts":"2026-09-14T03:10:31Z","mode":"smoke","track":"A","contender":"odoshi","metric":"jobs_recovery_s","run":1,"value":1.694,"outcome":"recovered"}
+{"ts":"2026-09-14T03:10:46Z","mode":"smoke","track":"A","contender":"foreman","metric":"jobs_recovery_s","run":1,"value":null,"outcome":"formation_exit"}
+{"ts":"2026-09-14T03:10:51Z","mode":"smoke","track":"A","contender":"overmind","metric":"jobs_recovery_s","run":1,"value":0.68,"outcome":"recovered"}
+{"ts":"2026-09-14T03:11:03Z","mode":"smoke","track":"A","contender":"compose","metric":"jobs_recovery_s","run":1,"value":1.543,"outcome":"recovered"}
+{"ts":"2026-09-14T03:11:18Z","mode":"smoke","track":"A","contender":"bare","metric":"jobs_recovery_s","run":1,"value":null,"outcome":"no_supervisor"}
+{"ts":"2026-09-14T03:11:26Z","mode":"smoke","track":"B","contender":"odoshi","metric":"boot_to_up_s","run":1,"value":0.831,"outcome":"ok"}
+{"ts":"2026-09-14T03:11:28Z","mode":"smoke","track":"B","contender":"foreman","metric":"boot_to_up_s","run":1,"value":0.668,"outcome":"ok"}
+{"ts":"2026-09-14T03:11:36Z","mode":"smoke","track":"B","contender":"overmind","metric":"boot_to_up_s","run":1,"value":0.713,"outcome":"ok"}
+{"ts":"2026-09-14T03:11:42Z","mode":"smoke","track":"B","contender":"compose","metric":"boot_to_up_s","run":1,"value":4.426,"outcome":"ok"}
+{"ts":"2026-09-14T03:11:45Z","mode":"smoke","track":"B","contender":"bare","metric":"boot_to_up_s","run":1,"value":0.723,"outcome":"ok"}
+{"ts":"2026-09-14T03:12:13Z","mode":"smoke","track":"B","contender":"odoshi","metric":"sup_rss_cpu","run":1,"value":null,"outcome":"ok","extra":{"pid":15520,"window_s":20.0,"samples":5,"rss_mb_mean":26.2,"rss_mb_max":26.2,"cpu_pct":0.05}}
+{"ts":"2026-09-14T03:12:16Z","mode":"smoke","track":"B","contender":"foreman","metric":"sup_rss_cpu","run":1,"value":null,"outcome":"pid_not_found"}
+{"ts":"2026-09-14T03:12:44Z","mode":"smoke","track":"B","contender":"overmind","metric":"sup_rss_cpu","run":1,"value":null,"outcome":"ok","extra":{"pid":15840,"window_s":20.0,"samples":5,"rss_mb_mean":7.9,"rss_mb_max":7.9,"cpu_pct":0.25}}
+{"ts":"2026-09-14T03:12:56Z","mode":"smoke","track":"B","contender":"odoshi","metric":"latency_up","run":1,"value":null,"outcome":"ok","extra":{"p50_ms":5.25,"p75_ms":5.61,"p90_ms":6.08,"p99_ms":7.31,"req_per_s":2978.6,"mean_ms":5.37}}
+{"ts":"2026-09-14T03:13:07Z","mode":"smoke","track":"B","contender":"bare","metric":"latency_up","run":1,"value":null,"outcome":"ok","extra":{"p50_ms":5.13,"p75_ms":5.48,"p90_ms":5.94,"p99_ms":7.79,"req_per_s":3030.7,"mean_ms":5.23}}
+{"ts":"2026-09-14T03:13:23Z","mode":"smoke","track":"C","contender":"odoshi-probe","metric":"detect_recover_s","run":1,"value":4.808,"outcome":"detected_recovered","extra":{"window_s":45}}
+{"ts":"2026-09-14T03:13:34Z","mode":"smoke","track":"C","contender":"odoshi-heartbeat","metric":"detect_recover_s","run":1,"value":5.432,"outcome":"detected_recovered","extra":{"window_s":45}}
+{"ts":"2026-09-14T03:14:25Z","mode":"smoke","track":"C","contender":"foreman","metric":"detect_recover_s","run":1,"value":null,"outcome":"not_detected","extra":{"window_s":45}}
+{"ts":"2026-09-14T03:15:22Z","mode":"smoke","track":"C","contender":"overmind","metric":"detect_recover_s","run":1,"value":null,"outcome":"not_detected","extra":{"window_s":45}}
+{"ts":"2026-09-14T03:16:16Z","mode":"smoke","track":"C","contender":"compose","metric":"detect_recover_s","run":1,"value":null,"outcome":"not_detected","extra":{"window_s":45}}
