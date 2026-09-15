@@ -53,11 +53,11 @@ Steady load: 50 rps against `/up`, 1 job/s enqueued. Median / p95 of time from S
 
 | Contender | Web: outcome | Web median | Web p95 | Failed reqs (median) | Jobs: outcome | Jobs median | Jobs p95 | Semantics |
 |---|---|---|---|---|---|---|---|---|
-| odoshi | recovered 5/5 | 1.91s | 2.00s | 93 | recovered 5/5 | 1.76s | 1.96s | restarts the killed child (`rest_for_one`); default 1s-base exponential backoff is part of the number |
-| overmind | recovered 5/5 | 0.77s | 0.84s | 36 | recovered 5/5 | 0.68s | 0.70s | `--auto-restart` respawns the dead process in its tmux pane, no backoff |
-| compose | recovered 5/5 | 1.41s | 1.48s | 70 | recovered 5/5 | 1.27s | 1.32s | `restart: always` restarts the crashed container (process = PID 1's child under tini) |
-| foreman | formation exited (documented) | — | — | 1536 | formation exited (documented) | — | — | **by design**: any child death stops the whole formation ([docs](https://github.com/ddollar/foreman)); production supervision is delegated to `foreman export` targets |
-| bare | not recovered (no supervisor) | — | — | 1525 | not recovered (no supervisor) | — | — | no supervisor — the honest baseline |
+| odoshi | recovered 5/5 | 0.85s | 0.95s | 41 | recovered 5/5 | 0.69s | 0.72s | restarts the killed child (`rest_for_one`) and confirms it healthy via the /up probe; since 0.3.1 the first restart is immediate (`:exponential` backoff starts at attempt 2) |
+| overmind | recovered 5/5 | 0.75s | 0.78s | 37 | recovered 5/5 | 0.73s | 0.75s | `--auto-restart` respawns the dead process in its tmux pane, no backoff |
+| compose | recovered 5/5 | 1.46s | 2.43s | 72 | recovered 5/5 | 1.47s | 1.61s | `restart: always` restarts the crashed container (process = PID 1's child under tini) |
+| foreman | formation exited (documented) | — | — | 1535 | formation exited (documented) | — | — | **by design**: any child death stops the whole formation ([docs](https://github.com/ddollar/foreman)); production supervision is delegated to `foreman export` targets |
+| bare | not recovered (no supervisor) | — | — | 1527 | not recovered (no supervisor) | — | — | no supervisor — the honest baseline |
 
 ### Track B — overhead
 
@@ -65,26 +65,26 @@ Steady load: 50 rps against `/up`, 1 job/s enqueued. Median / p95 of time from S
 
 | Contender | Median | p95 |
 |---|---|---|
-| odoshi | 0.67s | 0.77s |
-| foreman | 0.65s | 0.68s |
-| overmind | 0.60s | 0.62s |
-| compose | 4.42s | 4.60s |
-| bare | 0.73s | 0.77s |
+| odoshi | 0.76s | 0.84s |
+| foreman | 0.67s | 0.73s |
+| overmind | 0.66s | 0.71s |
+| compose | 4.62s | 4.66s |
+| bare | 0.76s | 0.78s |
 
 **Supervisor process RSS / CPU** (the supervisor process only, sampled over a steady window under load; overmind's mandatory tmux server reported separately):
 
 | Supervisor | RSS mean | RSS max | CPU% (window) | Window | Note |
 |---|---|---|---|---|---|
-| odoshi | 26.3 MB | 26.5 MB | 0.02% | 300s |  |
-| foreman | 17.3 MB | 17.3 MB | 0.02% | 300s |  |
-| overmind | 8.1 MB | 8.1 MB | 0.19% | 300s | + tmux server 13.5 MB |
+| odoshi | 26.3 MB | 26.3 MB | 0.04% | 300s |  |
+| foreman | 16.8 MB | 16.8 MB | 0.01% | 300s |  |
+| overmind | 7.9 MB | 7.9 MB | 0.20% | 300s | + tmux server 13.3 MB |
 
 **Supervised vs bare puma** — the key honesty test. Same app, same complement (web + jobs), `wrk -t2 -c16` against `/up`, warmup discarded; medians across runs:
 
 | Setup | mean | p50 | p90 | p99 | req/s |
 |---|---|---|---|---|---|
-| bare `puma` + `bin/jobs` | 5.38ms | 5.28ms | 6.0ms | 7.1ms | 2982 |
-| odoshi beside-mode (`bin/supervise`) | 5.35ms | 5.23ms | 6.01ms | 7.39ms | 2992 |
+| bare `puma` + `bin/jobs` | 5.4ms | 5.29ms | 6.05ms | 7.54ms | 2961 |
+| odoshi beside-mode (`bin/supervise`) | 5.4ms | 5.27ms | 6.08ms | 7.66ms | 2963 |
 
 ### Track C — detection of a wedged (alive-but-broken) child
 
@@ -92,8 +92,8 @@ Steady load: 50 rps against `/up`, 1 job/s enqueued. Median / p95 of time from S
 
 | Contender | Outcome | Median | p95 | Why |
 |---|---|---|---|---|
-| odoshi-probe | recovered 5/5 | 4.70s | 4.72s | HTTP probe of /up sees 503 ⇒ `:degraded`; `degraded_restart_after: 3` × `health_interval: 1` ⇒ drain + restart |
-| odoshi-heartbeat | recovered 5/5 | 4.34s | 4.43s | app self-reports `"degraded"` over the supervision socket; same restart rule |
+| odoshi-probe | recovered 5/5 | 3.73s | 3.79s | HTTP probe of /up sees 503 ⇒ `:degraded`; `degraded_restart_after: 3` × `health_interval: 1` ⇒ drain + restart |
+| odoshi-heartbeat | recovered 5/5 | 3.39s | 3.56s | app self-reports `"degraded"` over the supervision socket; same restart rule |
 | foreman | not detected within 120s | — | — | no health checking of any kind — process alive ⇒ fine (documented scope: it is a Procfile runner) |
 | overmind | not detected within 120s | — | — | no health checking — auto-restart triggers on *death* only |
 | compose | not detected within 120s | — | — | healthcheck marks the container `unhealthy`, but restart policies act on *exit* only; stock docker ships no autoheal |
@@ -104,82 +104,98 @@ Pre-enqueued with no worker running; drain measured from `solid_queue_jobs.finis
 
 | Worker | Outcome | Drain median | Window median | Jobs/s median |
 |---|---|---|---|---|
-| ruby-solid-queue | drained | 2.95s | 2.24s | 446.6 |
-| beam-elixir | drained | 2.82s | 1.49s | 672.9 |
+| ruby-solid-queue | drained | 2.98s | 2.24s | 446.2 |
+| beam-elixir | drained | 2.93s | 1.46s | 683.5 |
 
 ### Environment
 
-Run 2026-09-14T04:22:42Z · mode `full` · local · Darwin arm64 · 10 cpus (container) · Docker version 28.3.2, build 578ccf6
+Run 2026-09-15T18:44:50Z · mode `full` · local · Darwin arm64 · 10 cpus (container) · Docker version 28.3.2, build 578ccf6
 
-ruby: `ruby 3.4.10 (2026-06-30 revision 2b0b7728dc) +PRISM [aarch64` · rails: `Rails 8.1.3.1` · puma: `puma version 8.0.2` · odoshi: `0.3.0` · solid_queue: `solid_queue (1.7.0)` · foreman: `0.90.0` · overmind: `Overmind version 2.5.1` · wrk: `wrk debian/4.1.0-4+b1 [epoll] Copyright` · postgres: `postgres (PostgreSQL) 16.15 (Debian 16.15-1.pgdg13+2)`
+ruby: `ruby 3.4.10 (2026-06-30 revision 2b0b7728dc) +PRISM [aarch64` · rails: `Rails 8.1.3.1` · puma: `puma version 8.0.2` · odoshi: `0.3.1` · solid_queue: `solid_queue (1.7.0)` · foreman: `0.90.0` · overmind: `Overmind version 2.5.1` · wrk: `wrk debian/4.1.0-4+b1 [epoll] Copyright` · postgres: `postgres (PostgreSQL) 16.15 (Debian 16.15-1.pgdg13+2)`
 
 <!-- BENCH:END -->
 
 ## Findings
 
 <!-- FINDINGS:BEGIN -->
-From the 2026-09-13 full run (N=5, local Apple Silicon hardware disclosed in
-the environment row). Where a competitor beats odoshi, it says so.
+From the 2026-09-15 full run (N=5, odoshi **0.3.1**, local Apple Silicon
+hardware disclosed in the environment row). Where a competitor beats
+odoshi, it says so. The previous full run (2026-09-13, odoshi 0.3.0) is
+kept at `results/raw/2026-09-13-full.jsonl` for history.
+
+**The 0.3.0 → 0.3.1 delta — both fixes came from this bench**
+
+odoshi 0.3.1 shipped the two changes this suite surfaced:
+[odoshi#49](https://github.com/shishi-odoshi/odoshi/issues/49) (probe /up
+honesty vs the template heartbeat) and the immediate-first-restart fix for
+`:exponential` backoff ([odoshi-template#1](https://github.com/shishi-odoshi/odoshi-template/issues/1)).
+Same hardware, same harness, N=5 medians:
+
+| Metric | 0.3.0 | 0.3.1 | Delta |
+|---|---|---|---|
+| web SIGKILL → first 200 | 1.91s | **0.85s** | −1.06s (the backoff second, gone) |
+| jobs SIGKILL → jobs flowing | 1.77s | **0.69s** | −1.08s |
+| failed requests during web outage (50 rps) | 93 | **41** | −56% |
+| wedge → recovered-200 (probe) | 4.70s | **3.73s** | −0.97s |
+| wedge → recovered-200 (heartbeat) | 4.34s | **3.39s** | −0.95s |
+
+Controls stayed flat (overmind 0.77→0.75s web, compose 1.41→1.47s,
+latency/RSS/boot unchanged), so the delta is the gem, not the weather.
 
 **Where odoshi wins**
 
-- **Detection is real, and odoshi-only** (Track C). Both odoshi modes caught
-  the wedged-but-alive child and had a fresh 200 serving in ~4.3–4.7s
-  (5/5 runs, spread under 0.1s). foreman, overmind, and compose left the
-  wedged child serving 503s for the full 120s window — not as a failure,
-  but because none of them has a health-checking mechanism at all. This is
-  the claim the whole project stands on, and it held.
-- **Beside-mode overhead is indistinguishable from bare puma** (Track B3).
-  Medians over 5×30s wrk runs: bare p50 5.28ms / p99 7.10ms / 2982 req/s
-  vs odoshi p50 5.23ms / p99 7.39ms / 2992 req/s. The p99 delta (+0.29ms)
-  flips sign between runs; throughput is identical to 0.3%. Claim validated.
-- **Boot cost is nil**: boot-to-/up under odoshi (0.67s median) matches bare
-  puma (0.73s) — the supervisor never loads Rails, and it shows.
-- **Both children recover under load, every time** (Track A): web median
-  1.91s (p95 2.00s), jobs 1.77s (p95 1.96s), 25/25 recoveries across all
-  cycles. The template's sub-2.2s recovery claim holds under 50 rps load.
+- **Recovery is now genuinely fast** (Track A): odoshi **beats compose on
+  both children** (0.85s vs 1.47s web, 0.69s vs 1.47s jobs) and its jobs
+  recovery is the fastest cell in the whole table — quicker than
+  overmind (0.73s). On web it trails overmind by ~0.11s, which is now
+  real spawn-and-probe work, not policy. 25/25 recoveries.
+- **Detection is real, and odoshi-only** (Track C): wedged-but-alive child
+  back to serving 200s in 3.4–3.7s (5/5, spread <0.2s); foreman,
+  overmind, and compose leave it serving 503s for the full 120s window —
+  by construction, not malfunction: none of them health-checks.
+- **Beside-mode overhead is indistinguishable from bare puma** (Track B3):
+  bare p50 5.29ms / p99 7.54ms / 2961 req/s vs odoshi p50 5.27ms /
+  p99 7.66ms / 2963 req/s. The tiny p99 delta flips sign between runs.
+- **Boot cost is nil**: boot-to-/up under odoshi (0.76s) matches bare puma
+  (0.76s) — the supervisor never loads Rails, and it shows.
 
-**Where odoshi loses — reported verbatim**
+**Where odoshi still loses — reported verbatim**
 
-- **overmind restarts faster**: web 0.77s and jobs 0.69s medians vs odoshi's
-  1.91s/1.77s. About 1s of every odoshi recovery is the template's default
-  `backoff :exponential, base: 1` — a deliberate flap-damper, but the
-  comparison is still a loss on raw speed. compose (1.41s/1.27s) also beats
-  odoshi. Caveat that overmind buys this speed with zero health semantics
-  (see Track C) and no per-child backoff/intensity policy.
-- **odoshi's supervisor is the heaviest of the three**: 26.3 MB RSS vs
-  foreman 17.3 MB (also Ruby) and overmind 8.1 MB (Go). Overmind's mandatory
-  tmux server adds another 13.5 MB, which narrows its real footprint
-  advantage (~21.6 MB combined) — but the strict supervisor-process
-  comparison is still a loss for odoshi. CPU over a 5-min loaded window:
-  odoshi 0.02% = foreman 0.02%, overmind 0.19%.
+- **overmind restarts the web child faster** (0.75s vs 0.85s median).
+  The remaining gap is odoshi doing work overmind does not: it confirms
+  the replacement is *healthy* (HTTP /up probe at 50ms cadence) where
+  overmind only respawns the pane and moves on.
+- **odoshi's supervisor is the heaviest strict-process RSS**: 26.3 MB vs
+  foreman 16.8 MB (also Ruby) and overmind 7.9 MB (Go) — though
+  overmind's mandatory tmux server adds 13.3 MB (~21.2 MB combined).
+  CPU over the 5-min loaded window: odoshi 0.04%, foreman 0.01%,
+  overmind 0.20%.
 
 **Track D (stretch): the beam sidecar out-drains the Ruby worker**
 
-- 1000 pre-enqueued no-op jobs on one Solid Queue schema: in-window
-  throughput (first→last finish, boot excluded) beam **673 jobs/s** vs Ruby
-  worker **447 jobs/s** — roughly 1.5× — with total drain-including-boot a
-  near-tie (2.82s vs 2.95s medians) because Rails boot for `bin/jobs` and
-  BEAM node start cost about the same. Same-job-different-runtime caveats
-  apply (the Ruby side runs the full ActiveJob stack per execution; beam
-  runs a registered Elixir handler; concurrency knobs matched where both
-  sides have one).
+- 1000 pre-enqueued no-op jobs, one Solid Queue schema: in-window
+  throughput beam **684 jobs/s** vs Ruby worker **446 jobs/s** (~1.5×);
+  total drain-including-boot a near-tie (2.93s vs 2.98s medians) because
+  Rails boot for `bin/jobs` and BEAM node start cost about the same.
+  Reproduced across both full runs. Same-job-different-runtime caveats in
+  the methodology notes.
 
-**Surprises**
+**Surprises (found by this bench, fixed upstream in 0.3.1)**
 
-- **The template's default heartbeat silently disables probe-based wedge
-  detection for `:web`** — the puma adapter tags the web child with
-  `ODOSHI_CHILD_ID`, the template initializer therefore heartbeats
-  `"healthy"` from it unconditionally, and DESIGN §5 active-first means
-  that beat out-votes the failing HTTP probe. Verified: an otherwise
-  identical probe config without heartbeat suppression never detects the
-  wedge. Filed as [odoshi#49](https://github.com/shishi-odoshi/odoshi/issues/49);
-  the Track C probe contender suppresses the heartbeat to measure what the
-  probe path can actually do.
+- **The template default heartbeat used to mask probe-based wedge
+  detection for `:web`** — active-first health let an always-"healthy"
+  beat out-vote the failing HTTP probe ([odoshi#49](https://github.com/shishi-odoshi/odoshi/issues/49),
+  fixed in 0.3.1). The Track C probe contender retains
+  `ODOSHI_SUPPRESS_HEARTBEAT` so the probe path stays measurable in
+  isolation either way.
+- **A gha-cached image layer silently re-benchmarked 0.3.0 after 0.3.1
+  shipped** — the gem under test is now pinned via the `ODOSHI_VERSION`
+  build ARG placed *before* `rails new`, so bumping it rebuilds the
+  bundle, and `collect_meta` records the bundled version as ground truth
+  in every run.
 - **foreman's teardown races the measurement**: after SIGKILLing puma, the
-  dying formation can answer one more 200 before foreman's TERM lands — an
-  early harness version misread that as a 0.46s "recovery". The harness now
-  requires /up to drop before the recovery clock can stop
+  dying formation can answer one more 200 before foreman's TERM lands.
+  The harness requires /up to drop before the recovery clock can stop
   (`wait_down`), for every contender.
 <!-- FINDINGS:END -->
 

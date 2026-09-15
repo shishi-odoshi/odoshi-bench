@@ -57,7 +57,7 @@ puts "wrote results/results.json (#{rows.size} rows, #{aggregates.size} aggregat
 
 # ----------------------------------------------------------- README tables -
 A_SEMANTICS = {
-  "odoshi" => "restarts the killed child (`rest_for_one`); default 1s-base exponential backoff is part of the number",
+  "odoshi" => "restarts the killed child (`rest_for_one`) and confirms it healthy via the /up probe; since 0.3.1 the first restart is immediate (`:exponential` backoff starts at attempt 2)",
   "foreman" => "**by design**: any child death stops the whole formation ([docs](https://github.com/ddollar/foreman)); production supervision is delegated to `foreman export` targets",
   "overmind" => "`--auto-restart` respawns the dead process in its tmux pane, no backoff",
   "compose" => "`restart: always` restarts the crashed container (process = PID 1's child under tini)",
