@@ -21,7 +21,7 @@ ENV BUNDLE_JOBS=4 \
 RUN gem install rails foreman --no-document && \
     gem install pg puma bootsnap propshaft importmap-rails turbo-rails \
                 stimulus-rails jbuilder solid_queue solid_cable solid_cache \
-                thruster odoshi --no-document && \
+                thruster --no-document && \
     gem install json --version "< 3.0" --no-document
 
 # Contender: overmind (pinned release binary — its documented install path).
@@ -43,6 +43,14 @@ RUN set -eux; \
 # Generate the ONE app under test from the published template (same artifact
 # `rails new -m <raw url>` users get). TEMPLATE_URL overridable for hermetic
 # rebuilds; retried for the same registry-flake reason as above.
+# The gem under test is pinned via ARG: results stay attributable to one
+# version, and bumping it busts every layer from here down — a gha-CACHED
+# layer silently re-benchmarked 0.3.0 after 0.3.1 shipped. The generated
+# app's bundle resolves "~> 0.3" fresh in the (busted) layer below;
+# collect_meta records the actual bundled version as ground truth.
+ARG ODOSHI_VERSION=0.3.1
+RUN gem install odoshi --version "$ODOSHI_VERSION" --no-document
+
 ARG TEMPLATE_URL=https://raw.githubusercontent.com/shishi-odoshi/odoshi-template/main/template.rb
 RUN set -eux; \
     for i in 1 2 3 4 5; do \
