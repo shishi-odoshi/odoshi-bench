@@ -53,11 +53,11 @@ Steady load: 50 rps against `/up`, 1 job/s enqueued. Median / p95 of time from S
 
 | Contender | Web: outcome | Web median | Web p95 | Failed reqs (median) | Jobs: outcome | Jobs median | Jobs p95 | Semantics |
 |---|---|---|---|---|---|---|---|---|
-| odoshi | recovered 5/5 | 0.85s | 0.95s | 41 | recovered 5/5 | 0.69s | 0.72s | restarts the killed child (`rest_for_one`) and confirms it healthy via the /up probe; since 0.3.1 the first restart is immediate (`:exponential` backoff starts at attempt 2) |
-| overmind | recovered 5/5 | 0.75s | 0.78s | 37 | recovered 5/5 | 0.73s | 0.75s | `--auto-restart` respawns the dead process in its tmux pane, no backoff |
-| compose | recovered 5/5 | 1.46s | 2.43s | 72 | recovered 5/5 | 1.47s | 1.61s | `restart: always` restarts the crashed container (process = PID 1's child under tini) |
+| odoshi | recovered 5/5 | 0.83s | 0.91s | 40 | recovered 5/5 | 0.71s | 0.72s | restarts the killed child (`rest_for_one`) and confirms it healthy via the /up probe; since 0.3.1 the first restart is immediate (`:exponential` backoff starts at attempt 2) |
+| overmind | recovered 5/5 | 0.82s | 0.94s | 39 | recovered 5/5 | 0.70s | 0.71s | `--auto-restart` respawns the dead process in its tmux pane, no backoff |
+| compose | recovered 5/5 | 1.50s | 2.24s | 74 | recovered 5/5 | 1.47s | 1.51s | `restart: always` restarts the crashed container (process = PID 1's child under tini) |
 | foreman | formation exited (documented) | — | — | 1535 | formation exited (documented) | — | — | **by design**: any child death stops the whole formation ([docs](https://github.com/ddollar/foreman)); production supervision is delegated to `foreman export` targets |
-| bare | not recovered (no supervisor) | — | — | 1527 | not recovered (no supervisor) | — | — | no supervisor — the honest baseline |
+| bare | not recovered (no supervisor) | — | — | 1528 | not recovered (no supervisor) | — | — | no supervisor — the honest baseline |
 
 ### Track B — overhead
 
@@ -65,26 +65,26 @@ Steady load: 50 rps against `/up`, 1 job/s enqueued. Median / p95 of time from S
 
 | Contender | Median | p95 |
 |---|---|---|
-| odoshi | 0.76s | 0.84s |
-| foreman | 0.67s | 0.73s |
-| overmind | 0.66s | 0.71s |
-| compose | 4.62s | 4.66s |
-| bare | 0.76s | 0.78s |
+| odoshi | 0.70s | 0.87s |
+| foreman | 0.66s | 0.68s |
+| overmind | 0.62s | 0.66s |
+| compose | 4.64s | 4.71s |
+| bare | 0.73s | 0.75s |
 
 **Supervisor process RSS / CPU** (the supervisor process only, sampled over a steady window under load; overmind's mandatory tmux server reported separately):
 
 | Supervisor | RSS mean | RSS max | CPU% (window) | Window | Note |
 |---|---|---|---|---|---|
-| odoshi | 26.3 MB | 26.3 MB | 0.04% | 300s |  |
-| foreman | 16.8 MB | 16.8 MB | 0.01% | 300s |  |
-| overmind | 7.9 MB | 7.9 MB | 0.20% | 300s | + tmux server 13.3 MB |
+| odoshi | 26.5 MB | 26.6 MB | 0.04% | 300s |  |
+| foreman | 16.7 MB | 16.7 MB | 0.02% | 300s |  |
+| overmind | 7.9 MB | 7.9 MB | 0.19% | 300s | + tmux server 13.5 MB |
 
 **Supervised vs bare puma** — the key honesty test. Same app, same complement (web + jobs), `wrk -t2 -c16` against `/up`, warmup discarded; medians across runs:
 
 | Setup | mean | p50 | p90 | p99 | req/s |
 |---|---|---|---|---|---|
-| bare `puma` + `bin/jobs` | 5.4ms | 5.29ms | 6.05ms | 7.54ms | 2961 |
-| odoshi beside-mode (`bin/supervise`) | 5.4ms | 5.27ms | 6.08ms | 7.66ms | 2963 |
+| bare `puma` + `bin/jobs` | 5.42ms | 5.25ms | 6.03ms | 7.59ms | 2967 |
+| odoshi beside-mode (`bin/supervise`) | 5.39ms | 5.27ms | 6.01ms | 7.41ms | 2970 |
 
 ### Track C — detection of a wedged (alive-but-broken) child
 
@@ -92,11 +92,42 @@ Steady load: 50 rps against `/up`, 1 job/s enqueued. Median / p95 of time from S
 
 | Contender | Outcome | Median | p95 | Why |
 |---|---|---|---|---|
-| odoshi-probe | recovered 5/5 | 3.73s | 3.79s | HTTP probe of /up sees 503 ⇒ `:degraded`; `degraded_restart_after: 3` × `health_interval: 1` ⇒ drain + restart |
-| odoshi-heartbeat | recovered 5/5 | 3.39s | 3.56s | app self-reports `"degraded"` over the supervision socket; same restart rule |
+| odoshi-probe | recovered 5/5 | 3.64s | 3.72s | HTTP probe of /up sees 503 ⇒ `:degraded`; `degraded_restart_after: 3` × `health_interval: 1` ⇒ drain + restart |
+| odoshi-heartbeat | recovered 5/5 | 3.35s | 4.32s | app self-reports `"degraded"` over the supervision socket; same restart rule |
 | foreman | not detected within 120s | — | — | no health checking of any kind — process alive ⇒ fine (documented scope: it is a Procfile runner) |
 | overmind | not detected within 120s | — | — | no health checking — auto-restart triggers on *death* only |
 | compose | not detected within 120s | — | — | healthcheck marks the container `unhealthy`, but restart policies act on *exit* only; stock docker ships no autoheal |
+
+### Track E — concurrency (odoshi 0.3.1 vs 0.4.0, same harness)
+
+0.4.0 boots `one_for_one` trees concurrently and starts/drains replicas within a slot together. This is a version A/B on the slim `bench-e` image, whose only difference between the two builds is the pinned gem — children are fixture commands with a deliberately slow readiness (1.5s) and a slow drain (1.0s linger), so the number is **scheduling**, not Rails boot. 5 children.
+
+**E1 — boot to all children ready** (`one_for_one`; expectation: Σ ⇒ max):
+
+| odoshi | Median | p95 | vs 0.3.1 |
+|---|---|---|---|
+| 0.3.1 | 7.94s | 7.96s | — |
+| 0.4.0 | 1.60s | 1.62s | **5.0× faster** |
+
+**E2 — stop to supervisor exit 0** (5 interchangeable workers, each lingering 1.0s on SIGTERM):
+
+| Declaration | odoshi | Median | p95 | vs 0.3.1 |
+|---|---|---|---|---|
+| 5 separately declared children | 0.3.1 | 5.23s | 5.27s | — |
+| one slot, `count: 5` | 0.4.0 | 1.06s | 1.08s | **5.0× faster** |
+| `count: 5` attempted on 0.3.1 | 0.3.1 | — | — | **not comparable** — `count:` does not exist in 0.3.1 and is silently swallowed by `**opts`: 1 child declared, 5 requested, no error |
+
+The two shapes are **not the same declaration**: before 0.4.0 the only way to express N workers was N ordered slots, which drain in reverse slot order serially — that is 0.3.1's documented contract, not a defect. 0.4.0 adds a way to say "these are peers", and peers drain together. The speedup is new expressive power, not a fixed bug.
+
+**E3 — ordered-strategy control on 0.4.0** (the guard against making it fast by breaking the contract):
+
+| Strategy | Median | p95 | Must be |
+|---|---|---|---|
+| `one_for_one` (parallel by design) | 1.60s | 1.62s | ≈ max ≈ 1.5s |
+| `rest_for_one` (ordered ⇒ serial) | 7.90s | 7.99s | ≈ Σ ≈ 7.5s |
+| `one_for_all` (ordered ⇒ serial) | 7.96s | 7.98s | ≈ Σ ≈ 7.5s |
+
+Ordered strategies stay serial on 0.4.0: declaration order is a dependency contract, and the parallelism is scoped to where that contract says nothing.
 
 ### Track D — sidecar queue drain (1000 no-op jobs, one Postgres)
 
@@ -104,26 +135,60 @@ Pre-enqueued with no worker running; drain measured from `solid_queue_jobs.finis
 
 | Worker | Outcome | Drain median | Window median | Jobs/s median |
 |---|---|---|---|---|
-| ruby-solid-queue | drained | 2.98s | 2.24s | 446.2 |
-| beam-elixir | drained | 2.93s | 1.46s | 683.5 |
+| ruby-solid-queue | drained | 3.05s | 2.27s | 439.9 |
+| beam-elixir | drained | 2.73s | 1.41s | 709.7 |
 
 ### Environment
 
-Run 2026-09-15T18:44:50Z · mode `full` · local · Darwin arm64 · 10 cpus (container) · Docker version 28.3.2, build 578ccf6
+Run 2026-09-16T17:20:58Z · mode `full` · local · Darwin arm64 · 10 cpus (container) · Docker version 28.3.2, build 578ccf6
 
-ruby: `ruby 3.4.10 (2026-06-30 revision 2b0b7728dc) +PRISM [aarch64` · rails: `Rails 8.1.3.1` · puma: `puma version 8.0.2` · odoshi: `0.3.1` · solid_queue: `solid_queue (1.7.0)` · foreman: `0.90.0` · overmind: `Overmind version 2.5.1` · wrk: `wrk debian/4.1.0-4+b1 [epoll] Copyright` · postgres: `postgres (PostgreSQL) 16.15 (Debian 16.15-1.pgdg13+2)`
+ruby: `ruby 3.4.10 (2026-06-30 revision 2b0b7728dc) +PRISM [aarch64` · rails: `Rails 8.1.3.1` · puma: `puma version 8.0.2` · odoshi: `0.4.0` · solid_queue: `solid_queue (1.7.0)` · foreman: `0.90.0` · overmind: `Overmind version 2.5.1` · wrk: `wrk debian/4.1.0-4+b1 [epoll] Copyright` · postgres: `postgres (PostgreSQL) 16.15 (Debian 16.15-1.pgdg13+2)`
 
 <!-- BENCH:END -->
 
 ## Findings
 
 <!-- FINDINGS:BEGIN -->
-From the 2026-09-15 full run (N=5, odoshi **0.3.1**, local Apple Silicon
+From the 2026-09-16 full run (N=5, odoshi **0.4.0**, local Apple Silicon
 hardware disclosed in the environment row). Where a competitor beats
-odoshi, it says so. The previous full run (2026-09-13, odoshi 0.3.0) is
-kept at `results/raw/2026-09-13-full.jsonl` for history.
+odoshi, it says so. Earlier full runs are kept for history:
+`results/raw/2026-09-15-full.jsonl` (0.3.1) and
+`results/raw/2026-09-13-full.jsonl` (0.3.0).
+
+> **Gem under test:** tracks A–D ran against 0.4.0; Track E is an explicit
+> 0.3.1-vs-0.4.0 A/B. odoshi **0.4.1** shipped after this run and is a
+> config-validation change only (it rejects typo'd lifecycle options — see
+> below), so it carries no performance delta and no rerun.
+
+**0.4.0 → what the concurrency work bought (Track E)**
+
+Same harness, same hardware, only the pinned gem version differs — the
+`ODOSHI_VERSION` build ARG exists precisely so this comparison is
+attributable:
+
+| Measurement | 0.3.1 | 0.4.0 | Delta |
+|---|---|---|---|
+| boot, 5 slow children, `one_for_one` | 7.93s | **1.59s** | −80% (Σ → max) |
+| drain, 5 peers lingering on TERM | 5.23s | **1.06s** | −80% |
+| **control:** same tree, `rest_for_one` | 7.91s | 7.91s | **unchanged** |
+| **control:** same tree, `one_for_all` | — | 7.96s | **unchanged** |
+
+The controls are the point. Parallelism is scoped to where declaration
+order carries no dependency; ordered strategies boot exactly as serially as
+they did in 0.3.1. A fast number in those two rows would have meant the
+dependency contract was broken, not that the supervisor got quicker.
+
+**A finding that shipped as 0.4.1**
+
+Exercising `count:` for Track E surfaced a config footgun: lifecycle
+options are keywords and everything else passes through to the adapter by
+design, so a *typo* vanished silently — `cont: 4` declared ONE child, no
+error, tree booting happily in the wrong shape. odoshi 0.4.1 now raises
+`ConfigError` (exit 78) with a did-you-mean for any key within two edits of
+a lifecycle option, while genuine adapter opts still pass through.
 
 **The 0.3.0 → 0.3.1 delta — both fixes came from this bench**
+
 
 odoshi 0.3.1 shipped the two changes this suite surfaced:
 [odoshi#49](https://github.com/shishi-odoshi/odoshi/issues/49) (probe /up
@@ -233,6 +298,28 @@ one Postgres Solid Queue schema, drained by the Ruby worker (`bin/jobs`) vs
 the [beam](https://github.com/shishi-odoshi/beam) Elixir worker, both from
 their published artifacts.
 
+**Track E — concurrency (a version A/B, not a competitor comparison).**
+odoshi 0.4.0 added replicas (`count: N`) and parallelism where declaration
+order carries no dependency. Attributing that gain honestly means comparing
+odoshi to *itself*: the same harness runs against **0.3.1 and 0.4.0**, on the
+slim `bench-e` image whose two builds differ in exactly one thing — the
+pinned gem. Children are fixture commands with a deliberately slow readiness
+(`bench/slow_child.rb`: sleep, then bind a TCP port) and a slow drain (linger
+on SIGTERM), so the number measures **scheduling**, not Rails boot. Readiness
+(port accepting) and drain (supervisor exit status) are both observed from
+outside the supervisor, identically on both versions — the harness cannot
+tell the versions apart except by what they do.
+
+- **E1 boot**: 5 children, ~1.5s readiness each, `one_for_one` — Σ vs max.
+- **E2 drain**: 5 interchangeable workers lingering ~1s on SIGTERM. 0.3.1 can
+  only express this as 5 *ordered slots* (no `count:`), which drain serially
+  by contract; 0.4.0 declares them as one slot of peers. Different
+  declarations, stated as such in the table.
+- **E3 control**: the same tree under `rest_for_one` / `one_for_all` on
+  0.4.0 — must stay ≈serial. This is the guard against "we made it fast by
+  breaking the contract", and the sanity gate fails the run if an ordered
+  strategy ever goes parallel.
+
 ## Running it
 
 Requires Docker with Compose v2. The app image bakes a fresh
@@ -243,9 +330,15 @@ patches (`app/patches/apply.sh`); all contenders run that one image.
 scripts/bench.sh                       # full matrix (N=5, ~1.5–2h): the README numbers
 scripts/bench.sh --mode ci             # reduced matrix (N=3, shorter windows): what CI runs
 scripts/bench.sh --mode smoke          # N=1 plumbing check
-scripts/bench.sh --tracks abcd         # include the stretch track D
+scripts/bench.sh --tracks abcde        # everything: + stretch D and the 0.3.1/0.4.0 A/B
+scripts/bench.sh --tracks e            # just Track E (no postgres, no Rails app needed)
 scripts/bench.sh --tracks a --keep     # one track, leave the stack up
 ```
+
+The gem under test is pinned by the `ODOSHI_VERSION` build ARG in
+`app/Dockerfile` (and `bench-e/Dockerfile` for Track E). Bump it to benchmark
+a new release; `scripts/collect_meta.rb` records the version actually bundled,
+so every results file states what it really measured.
 
 Outputs: `results/raw/DATE-MODE.jsonl` (every row), `results/results.json`
 (aggregates + environment), README tables re-rendered in place.
@@ -255,11 +348,13 @@ Outputs: `results/raw/DATE-MODE.jsonl` (every row), `results/results.json`
 ### CI
 
 `.github/workflows/ci.yml` runs the **reduced matrix** (`--mode ci`,
-tracks A/B/C, N=3, shorter observation windows — e.g. 60s instead of 120s
+tracks A/B/C/E, N=3, shorter observation windows — e.g. 60s instead of 120s
 for Track C non-detectors) as a smoke/regression check on ubuntu runners,
-uploading the results as an artifact. CI numbers are for regression
-detection only; the README tables come from full local runs on disclosed
-hardware. Track D is local-only.
+uploading the results as an artifact. Track E runs a cheap subset there
+(3 children, N=2) but keeps its E3 ordered-strategy control, since that is
+the contract guard. CI numbers are for regression detection only; the README
+tables come from full local runs on disclosed hardware. Track D is
+local-only (it needs the beam sidecar image).
 
 ## Methodology notes & caveats
 
@@ -299,6 +394,20 @@ hardware. Track D is local-only.
 - **Bench surface deltas** to the generated app are exactly the contents of
   `app/patches/` (documented in `apply.sh`); every contender runs the same
   patched app.
+- **Track E runs on a different image on purpose.** Its subject is odoshi's
+  own scheduling, so it uses the slim `bench-e` image (ruby + the pinned gem
+  + fixture children) rather than the Rails app image. That keeps the
+  0.3.1-vs-0.4.0 delta attributable to the gem alone and makes the A/B cheap
+  enough for CI. It also means Track E numbers are **not** comparable to
+  Track A/B numbers — different workload, different image, by design.
+- **Track E's E2 compares two different declarations**, because 0.3.1 has no
+  way to spell "N interchangeable peers". Each version is measured at its own
+  best available expression of the same intent, and the table says so rather
+  than implying a like-for-like race. Asked to run a `count:` config on 0.3.1
+  directly, the harness reports `replicas_unsupported` instead of a number.
+- **Track E readiness is a TCP port, not telemetry text.** Log formats are
+  free to change between versions; a port either accepts or it doesn't. The
+  measurement is therefore identical on both sides of the A/B.
 
 ## Repo layout
 

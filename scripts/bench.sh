@@ -6,7 +6,9 @@
 #   --mode    full (default): N=5, full windows — the README numbers.
 #             ci: reduced matrix (N=3, shorter windows) — the smoke/regression check.
 #             smoke: N=1, minimal windows — harness plumbing check.
-#   --tracks  any subset of "abcd" (default: abc; d is the stretch track).
+#   --tracks  any subset of "abcde" (default: abc; d is the stretch track,
+#             e is the 0.3.1-vs-0.4.0 concurrency A/B on the slim bench-e
+#             image — it needs no postgres and no Rails app).
 #   --no-build  skip `docker compose build` (CI pre-builds with layer cache).
 #   --keep      leave the stack up afterwards.
 #
@@ -72,6 +74,7 @@ case "$TRACKS" in *a*) run_phase track-a scripts/track_a.sh ;; esac
 case "$TRACKS" in *b*) run_phase track-b scripts/track_b.sh ;; esac
 case "$TRACKS" in *c*) run_phase track-c scripts/track_c.sh ;; esac
 case "$TRACKS" in *d*) run_phase track-d scripts/track_d.sh ;; esac
+case "$TRACKS" in *e*) run_phase track-e scripts/track_e.sh ;; esac
 
 run_phase aggregate ruby scripts/render_results.rb "$RAW_FILE"
 run_phase sanity ruby scripts/assert_sanity.rb results/results.json

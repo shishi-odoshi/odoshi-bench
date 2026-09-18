@@ -24,7 +24,10 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       # Layer-cached build: the expensive layer (rails new + bundle install)
-      # only rebuilds when the Dockerfile or template change.
+      # only rebuilds when the Dockerfile or template change. The gem under
+      # test is pinned by the ODOSHI_VERSION ARG *above* `rails new`, so a
+      # version bump busts this cache instead of silently re-benchmarking the
+      # old gem (which is exactly what happened once — see the README).
       - uses: docker/build-push-action@v6
         with:
           context: app
@@ -33,8 +36,34 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Track E's two pinned supervisor images. They are tiny (ruby + the gem,
+      # no Rails), so both fit the CI budget with room to spare.
+      - uses: docker/build-push-action@v6
+        with:
+          context: bench-e
+          build-args: ODOSHI_VERSION=0.3.1
+          tags: odoshi-bench-e:0.3.1
+          load: true
+          cache-from: type=gha,scope=bench-e-031
+          cache-to: type=gha,mode=max,scope=bench-e-031
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: bench-e
+          build-args: ODOSHI_VERSION=0.4.0
+          tags: odoshi-bench-e:0.4.0
+          load: true
+          cache-from: type=gha,scope=bench-e-040
+          cache-to: type=gha,mode=max,scope=bench-e-040
+
       - name: bench (reduced matrix)
-        run: scripts/bench.sh --mode ci --tracks abc --no-build
+        # Tracks A/B/C at N=3 plus a cheap Track E subset: 3 children, N=2,
+        # and E3's ordered-strategy control kept (it is the contract guard and
+        # costs ~10s per run — the thing least worth dropping for budget).
+        env:
+          E_CHILDREN: "3"
+          E_RUNS: "2"
+        run: scripts/bench.sh --mode ci --tracks abce --no-build
 
       - name: upload results
         if: always()

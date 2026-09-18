@@ -53,8 +53,35 @@ if aggs.any? { |a| a["track"] == "B" }
   end
 end
 
+# Track E: the concurrency claims, and the contract they must not break.
+if aggs.any? { |a| a["track"] == "E" }
+  e = ->(metric, contender) { find(aggs, "E", metric, contender) }
+  par = e.call("boot_s", "odoshi-0.4.0")
+  ser = e.call("boot_s", "odoshi-0.3.1")
+  if par && ser && par["median"] && ser["median"] && par["median"] > ser["median"] / 2.0
+    # 0.4.0's one_for_one boot must be materially faster than 0.3.1's serial
+    # boot — the headline claim. 2x is a deliberately loose floor (measured
+    # gain is ~5x at 5 children): a regression gate, not a target to tune to.
+    failures << "E1: 0.4.0 one_for_one boot #{par['median']}s not materially faster than 0.3.1 #{ser['median']}s"
+  end
+  # E3 is the contract guard: ordered strategies must NOT have gone parallel.
+  %w[rest_for_one one_for_all].each do |strat|
+    ordered = e.call("boot_s", "odoshi-0.4.0-#{strat}")
+    next unless ordered && ordered["median"] && par && par["median"]
+    if ordered["median"] < par["median"] * 2
+      failures << "E3: 0.4.0 #{strat} boot #{ordered['median']}s looks parallel — ordered strategies must stay serial (declaration order is a dependency contract)"
+    end
+  end
+  # Every E row that claims a measurement must actually have measured one.
+  aggs.select { |a| a["track"] == "E" }.each do |a|
+    next if a["contender"].include?("count-attempted") # the documented asymmetry probe
+    extra = a["outcomes"].keys - %w[ok]
+    failures << "E: #{a['contender']} #{a['metric']} outcomes #{a['outcomes']}" unless extra.empty?
+  end
+end
+
 # No run may end in harness-error outcomes.
-bad = aggs.flat_map { |a| a["outcomes"].keys } & %w[boot_failed kill_failed wedge_failed wedge_not_applied jobs_never_flowed pid_not_found]
+bad = aggs.flat_map { |a| a["outcomes"].keys } & %w[boot_failed kill_failed wedge_failed wedge_not_applied jobs_never_flowed pid_not_found harness_error boot_timeout]
 failures << "harness-error outcomes present: #{bad}" unless bad.empty?
 
 if failures.empty?

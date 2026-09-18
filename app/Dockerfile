@@ -48,7 +48,7 @@ RUN set -eux; \
 # layer silently re-benchmarked 0.3.0 after 0.3.1 shipped. The generated
 # app's bundle resolves "~> 0.3" fresh in the (busted) layer below;
 # collect_meta records the actual bundled version as ground truth.
-ARG ODOSHI_VERSION=0.3.1
+ARG ODOSHI_VERSION=0.4.0
 RUN gem install odoshi --version "$ODOSHI_VERSION" --no-document
 
 ARG TEMPLATE_URL=https://raw.githubusercontent.com/shishi-odoshi/odoshi-template/main/template.rb

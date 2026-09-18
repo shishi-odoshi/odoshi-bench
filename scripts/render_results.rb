@@ -138,6 +138,60 @@ md << "| Contender | Outcome | Median | p95 | Why |\n|---|---|---|---|---|\n"
   md << "| #{c} | #{outcome_cell(d, window)} | #{fmt_s(d['median'])} | #{fmt_s(d['p95'])} | #{C_SEMANTICS[c]} |\n"
 end
 
+e_rows = aggregates.select { |a| a["track"] == "E" }
+unless e_rows.empty?
+  e_find = ->(metric, contender) { find(aggregates, "E", metric, contender) }
+  children = e_rows.map { |a| a.dig("extra_median", "children") }.compact.first&.round || 5
+  boot_delay = e_rows.map { |a| a.dig("extra_median", "boot_delay_s") }.compact.first || 1.5
+  linger = e_rows.map { |a| a.dig("extra_median", "linger_s") }.compact.max || 1.0
+
+  md << "\n### Track E — concurrency (odoshi 0.3.1 vs 0.4.0, same harness)\n\n"
+  md << "0.4.0 boots `one_for_one` trees concurrently and starts/drains replicas within a slot together. "
+  md << "This is a version A/B on the slim `bench-e` image, whose only difference between the two builds is the pinned gem — "
+  md << "children are fixture commands with a deliberately slow readiness (#{boot_delay}s) and a slow drain (#{linger}s linger), "
+  md << "so the number is **scheduling**, not Rails boot. #{children} children.\n\n"
+
+  md << "**E1 — boot to all children ready** (`one_for_one`; expectation: Σ ⇒ max):\n\n"
+  md << "| odoshi | Median | p95 | vs 0.3.1 |\n|---|---|---|---|\n"
+  base_boot = e_find.call("boot_s", "odoshi-0.3.1")&.dig("median")
+  %w[odoshi-0.3.1 odoshi-0.4.0].each do |c|
+    a = e_find.call("boot_s", c)
+    next unless a
+    speedup = base_boot && a["median"] && c != "odoshi-0.3.1" ? format("**%.1f× faster**", base_boot / a["median"]) : "—"
+    md << "| #{c.sub('odoshi-', '')} | #{fmt_s(a['median'])} | #{fmt_s(a['p95'])} | #{speedup} |\n"
+  end
+
+  md << "\n**E2 — stop to supervisor exit 0** (#{children} interchangeable workers, each lingering #{linger}s on SIGTERM):\n\n"
+  md << "| Declaration | odoshi | Median | p95 | vs 0.3.1 |\n|---|---|---|---|---|\n"
+  base_drain = e_find.call("drain_s", "odoshi-0.3.1-5-slots")&.dig("median")
+  [["odoshi-0.3.1-5-slots", "#{children} separately declared children", "0.3.1"],
+   ["odoshi-0.4.0-replicas", "one slot, `count: #{children}`", "0.4.0"]].each do |c, shape, ver|
+    a = e_find.call("drain_s", c)
+    next unless a
+    speedup = base_drain && a["median"] && c.include?("0.4.0") ? format("**%.1f× faster**", base_drain / a["median"]) : "—"
+    md << "| #{shape} | #{ver} | #{fmt_s(a['median'])} | #{fmt_s(a['p95'])} | #{speedup} |\n"
+  end
+  if (att = e_find.call("drain_s", "odoshi-0.3.1-count-attempted"))
+    note = att["outcomes"].key?("replicas_unsupported") ? "**not comparable** — `count:` does not exist in 0.3.1 and is silently swallowed by `**opts`: #{att.dig('extra_median', 'declared_children')&.round || 1} child declared, #{children} requested, no error" : att["outcomes"].keys.join(",")
+    md << "| `count: #{children}` attempted on 0.3.1 | 0.3.1 | — | — | #{note} |\n"
+  end
+  md << "\nThe two shapes are **not the same declaration**: before 0.4.0 the only way to express N workers was N ordered slots, "
+  md << "which drain in reverse slot order serially — that is 0.3.1's documented contract, not a defect. "
+  md << "0.4.0 adds a way to say \"these are peers\", and peers drain together. The speedup is new expressive power, not a fixed bug.\n"
+
+  md << "\n**E3 — ordered-strategy control on 0.4.0** (the guard against making it fast by breaking the contract):\n\n"
+  md << "| Strategy | Median | p95 | Must be |\n|---|---|---|---|\n"
+  if (a = e_find.call("boot_s", "odoshi-0.4.0"))
+    md << "| `one_for_one` (parallel by design) | #{fmt_s(a['median'])} | #{fmt_s(a['p95'])} | ≈ max ≈ #{boot_delay}s |\n"
+  end
+  %w[rest_for_one one_for_all].each do |strat|
+    a = e_find.call("boot_s", "odoshi-0.4.0-#{strat}")
+    next unless a
+    md << "| `#{strat}` (ordered ⇒ serial) | #{fmt_s(a['median'])} | #{fmt_s(a['p95'])} | ≈ Σ ≈ #{(children * boot_delay).round(1)}s |\n"
+  end
+  md << "\nOrdered strategies stay serial on 0.4.0: declaration order is a dependency contract, and the parallelism is scoped to where that contract says nothing.\n"
+end
+
 d_rows = aggregates.select { |a| a["track"] == "D" }
 unless d_rows.empty?
   md << "\n### Track D — sidecar queue drain (1000 no-op jobs, one Postgres)\n\n"
